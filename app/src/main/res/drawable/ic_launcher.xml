@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- fond -->
+    <path android:fillColor="#2E7D4F" android:pathData="M0,0h108v108h-108z" />
+    <!-- route -->
+    <path android:fillColor="#5B6270" android:pathData="M30,0h48v108h-48z" />
+    <!-- porte gauche (bleue) -->
+    <path android:fillColor="#3D8BFF" android:pathData="M30,30h24v18h-24z" />
+    <!-- porte droite (rouge) -->
+    <path android:fillColor="#FF4D5E" android:pathData="M54,30h24v18h-24z" />
+    <!-- foule -->
+    <path android:fillColor="#FFFFFF" android:pathData="M54,72m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
+    <path android:fillColor="#FFFFFF" android:pathData="M42,80m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
+    <path android:fillColor="#FFFFFF" android:pathData="M66,80m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
+    <path android:fillColor="#FFFFFF" android:pathData="M54,86m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
+</vector>
