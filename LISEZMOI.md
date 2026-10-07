@@ -1,29 +1,32 @@
 # Légion des Portes
 
-Petit jeu Android de type « runner à portes » : ton armée avance toute seule, tu glisses le doigt à gauche ou à droite pour passer dans la bonne porte (+, −, ×, ÷), tu affrontes des troupes ennemies en route, puis tu dois avoir assez de soldats pour prendre le château à la fin. Chaque niveau est généré aléatoirement, toujours gagnable, et un peu plus dur que le précédent. La progression est sauvegardée.
+Jeu Android façon « runner de légion » dans un village médiéval.
 
-Le projet est écrit en Kotlin, sans aucune bibliothèque externe (dessin direct sur Canvas). minSdk 24 (Android 7.0+).
+Ton héros mage et sa légion avancent et tirent automatiquement. Un muret coupe la route en deux voies : glisse le doigt pour choisir ta voie.
 
-## Obtenir l'APK
+- **Tonneaux et coffres** : leur nombre, ce sont leurs points de vie. Casse-les pour gagner des soldats, plus de dégâts, une cadence de tir accrue, ou invoquer un **dragon** qui crache du feu sur les deux voies.
+- **Hordes de squelettes** : elles foncent sur toi. Chaque ennemi qui t'atteint emporte des soldats. Ne t'attarde pas trop sur les tonneaux !
+- **Portes bleues ou rouges** : tu gagnes ou perds des soldats en les traversant. Tirer dessus fait monter leur valeur.
+- **Le Seigneur Démon** t'attend au bout de chaque niveau.
 
-### Option A — Android Studio (sur ton ordinateur)
-1. Dézippe le dossier et ouvre-le avec Android Studio (File → Open).
-2. Laisse la synchronisation Gradle se terminer (la première fois peut prendre quelques minutes).
-3. Menu **Build → Build App Bundle(s) / APK(s) → Build APK(s)**.
-4. L'APK se trouve dans `app/build/outputs/apk/debug/app-debug.apk`.
-5. Ou branche ton téléphone (débogage USB activé) et clique sur ▶ Run.
+La difficulté s'adapte à la puissance de ta légion, et chaque niveau met un peu plus de pression. Les niveaux ont été équilibrés en simulant des milliers de parties.
 
-### Option B — GitHub, sans rien installer
-1. Crée un dépôt sur github.com et envoie-y le contenu de ce dossier (y compris le dossier caché `.github`).
-2. Onglet **Actions** : la compilation démarre toute seule (3 à 5 minutes).
-3. Ouvre le run terminé et télécharge l'artefact **LegionDesPortes-apk** (un zip contenant l'APK).
+## Télécharger l'APK
 
-### Installer sur le téléphone
-Copie l'APK sur le téléphone, ouvre-le, et autorise « Installer des applications inconnues » quand Android le demande.
+Lien direct, toujours la dernière version :
+https://github.com/helointearti/LegionDesPortes/releases/latest/download/LegionDesPortes.apk
 
-## Où modifier le jeu
-Tout est dans `app/src/main/java/fr/legiondesportes/GameView.kt` :
-- `START_COUNT` : soldats au départ
-- `goodOp` / `badOp` : valeurs des portes
-- `newLevel()` : nombre de portes, fréquence et force des ennemis, puissance du château
-- `speed` : vitesse de défilement
+Chaque envoi sur la branche `main` recompile automatiquement l'APK (onglet *Actions*) et publie une nouvelle version (onglet *Releases*).
+
+## Le code
+
+Tout est en Kotlin, sans bibliothèque externe, et dessiné sur Canvas (aucune image à charger) :
+
+| Fichier | Rôle |
+|---|---|
+| `World.kt` | logique pure : voies, tirs, hordes, tonneaux, portes, boss, génération adaptative |
+| `Renderer.kt` | fausse 3D en perspective : village, route pavée, murets, tri en profondeur, particules |
+| `Sprites.kt` | sprites dessinés au démarrage : héros, soldats, squelettes, tonneau, coffre, boss, dragon |
+| `GameView.kt` | boucle de jeu, contrôles, interface, écrans menu / victoire / défaite |
+
+Réglages faciles dans `World.kt` : `pressure` (force des hordes), `SCROLL` (vitesse), `ENEMY_SPEED`, et la fonction `randomReward` (fréquence des bonus).
