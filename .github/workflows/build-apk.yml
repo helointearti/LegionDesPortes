@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,7 +25,22 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
+      - name: Renommer l'APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk LegionDesPortes.apk
+
       - uses: actions/upload-artifact@v4
         with:
           name: LegionDesPortes-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: LegionDesPortes.apk
+
+      # Publie l'APK en téléchargement direct (onglet Releases)
+      - name: Publier la release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v1.0.${{ github.run_number }}"
+          gh release create "$TAG" LegionDesPortes.apk \
+            --title "Légion des Portes $TAG" \
+            --notes "APK à installer directement sur Android." \
+            --latest
