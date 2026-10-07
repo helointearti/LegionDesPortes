@@ -17,9 +17,23 @@ android {
         versionName = "1.0"
     }
 
+    // Clé fixe : chaque nouvelle version s'installe par-dessus la précédente
+    signingConfigs {
+        create("legion") {
+            storeFile = file("legion.keystore")
+            storePassword = "legion123"
+            keyAlias = "legion"
+            keyPassword = "legion123"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("legion")
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("legion")
         }
     }
 
