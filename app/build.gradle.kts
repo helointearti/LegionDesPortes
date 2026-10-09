@@ -13,8 +13,8 @@ android {
         applicationId = "fr.legiondesportes"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0"
     }
 
     // Clé fixe : chaque nouvelle version s'installe par-dessus la précédente

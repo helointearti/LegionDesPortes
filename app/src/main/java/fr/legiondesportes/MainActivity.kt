@@ -28,6 +28,12 @@ class MainActivity : Activity() {
         super.onPause()
     }
 
+    @Deprecated("Deprecated in Java")
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        if (!game.onBack()) super.onBackPressed()
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) hideSystemBars()
