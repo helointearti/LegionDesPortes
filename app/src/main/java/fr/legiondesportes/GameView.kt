@@ -27,6 +27,7 @@ class GameView(context: Context) : View(context) {
     private var bestLevel = prefs.getInt("best", 1)
     private var bestDist = prefs.getInt("bestDist", 0)
     private var bestBoss = prefs.getInt("bestBoss", 0)
+    private var bestWave = prefs.getInt("bestWave", 0)
 
     private val sprites = Sprites()
     private val renderer = Renderer(sprites)
@@ -53,6 +54,7 @@ class GameView(context: Context) : View(context) {
     // zones cliquables
     private val btnA = RectF()
     private val btnB = RectF()
+    private val btnC = RectF()
     private val btnPause = RectF()
     private val cardRects = Array(3) { RectF() }
 
@@ -109,6 +111,7 @@ class GameView(context: Context) : View(context) {
                     Screen.MENU -> {
                         if (btnA.contains(x, y)) start(Mode.CAMPAIGN)
                         else if (btnB.contains(x, y)) start(Mode.ENDLESS)
+                        else if (btnC.contains(x, y)) start(Mode.INVASION)
                     }
                     Screen.PLAYING -> {
                         if (userPaused) {
@@ -158,6 +161,11 @@ class GameView(context: Context) : View(context) {
                     setScreen(Screen.WON)
                 }
                 World.State.LOST -> {
+                    if (mode == Mode.INVASION) {
+                        val v = world.bossKills
+                        if (v > bestWave) { bestWave = v; newRecord = true }
+                        prefs.edit().putInt("bestWave", bestWave).apply()
+                    }
                     if (mode == Mode.ENDLESS) {
                         val d = world.traveled.toInt()
                         if (d > bestDist) { bestDist = d; newRecord = true }
@@ -204,6 +212,10 @@ class GameView(context: Context) : View(context) {
             rect.set(895f * u, top - 34f * u, 985f * u, top + 60f * u)
             c.drawBitmap(sprites.bosses[(level - 1) % 4], null, rect, bmp)
             txt(c, "NIVEAU $level", w / 2f, top + 80f * u, 52f * u, Color.WHITE)
+        } else if (mode == Mode.INVASION) {
+            txt(c, "VAGUE ${max(1, world.wave)}", w / 2f, top + 20f * u, 64f * u, Color.WHITE)
+            val rec = if (bestWave > 0) "  ·  Record $bestWave" else ""
+            txt(c, "Chapitre ${world.chapter} · boss final à la vague ${world.chapter * 4}$rec", w / 2f, top + 80f * u, 32f * u, Color.rgb(255, 225, 120))
         } else {
             txt(c, "${world.traveled.toInt()} m", w / 2f, top + 20f * u, 64f * u, Color.WHITE)
             val rec = if (bestDist > 0) "Record $bestDist m  ·  " else ""
@@ -229,7 +241,8 @@ class GameView(context: Context) : View(context) {
         val b = world.boss
         if (b != null && b.alive && b.z - world.traveled < 20f) {
             val y = by + 70f * u
-            txt(c, b.type.title.uppercase() + (if (b.mini) " (GARDIEN)" else ""), w / 2f, y, 40f * u, Color.rgb(255, 130, 110))
+            val tag = if (b.chief) "BOSS FINAL · " else "GARDIEN · "
+            txt(c, tag + b.type.title.uppercase(), w / 2f, y, 40f * u, if (b.chief) Color.rgb(255, 90, 70) else Color.rgb(255, 160, 120))
             rect.set(120f * u, y + 30f * u, 880f * u, y + 62f * u)
             fill.color = Color.argb(180, 30, 0, 0)
             c.drawRoundRect(rect, 16f * u, 16f * u, fill)
@@ -462,13 +475,13 @@ class GameView(context: Context) : View(context) {
 
         when (screen) {
             Screen.MENU -> {
-                val cy = h * 0.22f
+                val cy = h * 0.19f
                 rect.set(300f * u, cy - 250f * u, 700f * u, cy - 50f * u)
                 c.drawBitmap(sprites.dragon, null, rect, bmp)
                 txt(c, "LÉGION", w / 2f, cy, 150f * u, Color.WHITE)
                 txt(c, "DES PORTES", w / 2f, cy + 125f * u, 100f * u, Color.rgb(255, 200, 70))
                 // héros
-                val hy = cy + 400f * u
+                val hy = cy + 360f * u
                 for (i in 0 until 5) {
                     val hb = sprites.heroes[i]
                     val ph = 190f * u + (if (i == 2) 30f * u else 0f)
@@ -477,10 +490,12 @@ class GameView(context: Context) : View(context) {
                     rect.set(x - pw / 2f, hy - ph + sin(time * 2f + i) * 6f * u, x + pw / 2f, hy + sin(time * 2f + i) * 6f * u)
                     c.drawBitmap(hb, null, rect, bmp)
                 }
-                txt(c, "5 héros · 4 régions · 4 boss", w / 2f, hy + 50f * u, 38f * u, Color.rgb(230, 220, 255))
-                button(c, btnA, w / 2f, h * 0.62f, u, "CAMPAGNE", Color.rgb(200, 90, 40), "Niveau $level  ·  Record niv. $bestLevel")
-                button(c, btnB, w / 2f, h * 0.62f + 200f * u, u, "SANS LIMITE", Color.rgb(110, 60, 200),
+                txt(c, "5 héros · 3 modes · 4 régions · 4 boss", w / 2f, hy + 50f * u, 38f * u, Color.rgb(230, 220, 255))
+                button(c, btnA, w / 2f, h * 0.54f, u, "CAMPAGNE", Color.rgb(200, 90, 40), "Niveau $level  ·  Record niv. $bestLevel")
+                button(c, btnB, w / 2f, h * 0.54f + 180f * u, u, "SANS LIMITE", Color.rgb(110, 60, 200),
                     if (bestDist > 0) "Record $bestDist m  ·  $bestBoss boss" else "Jusqu'au dernier héros")
+                button(c, btnC, w / 2f, h * 0.54f + 360f * u, u, "INVASION", Color.rgb(200, 40, 50),
+                    if (bestWave > 0) "Record : $bestWave vagues" else "Repousse le flot, récolte les portes")
                 txt(c, "Glisse pour changer de voie · Casse les tonneaux", w / 2f, h * 0.92f, 34f * u, Color.WHITE, (150 + 100 * blink).toInt())
             }
             Screen.WON -> {
@@ -495,12 +510,17 @@ class GameView(context: Context) : View(context) {
             }
             Screen.LOST -> {
                 val cy = h * 0.3f
-                txt(c, if (mode == Mode.ENDLESS) "FIN DU VOYAGE" else "DÉFAITE", w / 2f, cy, if (mode == Mode.ENDLESS) 100f * u else 140f * u, Color.rgb(255, 90, 90))
+                txt(c, if (mode == Mode.ENDLESS) "FIN DU VOYAGE" else if (mode == Mode.INVASION) "SUBMERGÉ !" else "DÉFAITE", w / 2f, cy, if (mode == Mode.ENDLESS) 100f * u else 140f * u, Color.rgb(255, 90, 90))
                 txt(c, "Tous tes héros sont tombés…", w / 2f, cy + 110f * u, 44f * u, Color.WHITE)
                 if (mode == Mode.ENDLESS) {
                     txt(c, "${world.traveled.toInt()} m", w / 2f, cy + 230f * u, 110f * u, Color.rgb(255, 225, 120))
                     if (newRecord) txt(c, "NOUVEAU RECORD !", w / 2f, cy + 320f * u, 50f * u, Color.rgb(140, 255, 160), (150 + 100 * blink).toInt())
                     else txt(c, "Record : $bestDist m", w / 2f, cy + 320f * u, 40f * u, Color.WHITE)
+                    stats(c, cy + 400f * u, u)
+                } else if (mode == Mode.INVASION) {
+                    txt(c, "${world.bossKills} vagues", w / 2f, cy + 230f * u, 110f * u, Color.rgb(255, 225, 120))
+                    if (newRecord) txt(c, "NOUVEAU RECORD !", w / 2f, cy + 320f * u, 50f * u, Color.rgb(140, 255, 160), (150 + 100 * blink).toInt())
+                    else txt(c, "Record : $bestWave vagues", w / 2f, cy + 320f * u, 40f * u, Color.WHITE)
                     stats(c, cy + 400f * u, u)
                 } else {
                     stats(c, cy + 220f * u, u)

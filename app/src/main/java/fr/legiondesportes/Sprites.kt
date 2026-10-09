@@ -2,6 +2,8 @@ package fr.legiondesportes
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
@@ -36,10 +38,11 @@ class Sprites {
         make(96, 128) { c, p -> drawSkeleton(c, p) },
         make(96, 112) { c, p -> drawGoblin(c, p) },
         make(160, 170) { c, p -> drawBrute(c, p) },
-        make(160, 210) { c, p -> drawKnight(c, p) }
+        make(160, 210) { c, p -> drawKnight(c, p) },
+        make(90, 104) { c, p -> drawImp(c, p) }
     )
-    val enemyWhite: Array<Bitmap> = Array(4) { silhouette(enemies[it], Color.WHITE) }
-    val enemyIce: Array<Bitmap> = Array(4) { silhouette(enemies[it], Color.rgb(150, 230, 255)) }
+    val enemyWhite: Array<Bitmap> = Array(5) { silhouette(enemies[it], Color.WHITE) }
+    val enemyIce: Array<Bitmap> = Array(5) { silhouette(enemies[it], Color.rgb(150, 230, 255)) }
 
     val bosses: Array<Bitmap> = arrayOf(
         make(300, 330) { c, p -> drawDemon(c, p) },
@@ -50,6 +53,18 @@ class Sprites {
     val bossWhite: Array<Bitmap> = Array(4) { silhouette(bosses[it], Color.WHITE) }
 
     val dragon: Bitmap = make(420, 260) { c, p -> drawDragon(c, p) }
+
+    // ------------------------------------------------------------------ mode invasion
+    val barricade: Bitmap = make(320, 170) { c, p -> drawBarricade(c, p) }
+    val barricadeWhite: Bitmap = silhouette(barricade, Color.WHITE)
+    val padlock: Bitmap = make(64, 80) { c, p -> drawPadlock(c, p) }
+    val goldHeroes: Array<Bitmap> by lazy { Array(5) { gold(heroes[it]) } }
+    val goldSword: Bitmap by lazy { gold(iconSword) }
+    val goldBolt: Bitmap by lazy { gold(iconBolt) }
+    val goldDragon: Bitmap by lazy { gold(dragon) }
+    val goldHeart: Bitmap by lazy { gold(iconHeart) }
+    val goldSkills: Array<Bitmap> by lazy { Array(5) { gold(skillIcons[it]) } }
+    val goldAlly: Bitmap by lazy { gold(ally) }
 
     // ------------------------------------------------------------------ objets
     val barrel: Bitmap = make(128, 140) { c, p -> drawBarrel(c, p) }
@@ -110,6 +125,21 @@ class Sprites {
         val c = Canvas(b)
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
         p.colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
+        c.drawBitmap(src, 0f, 0f, p)
+        return b
+    }
+
+    /** Version « statue dorée » d'un sprite (niveaux de gris teintés or). */
+    private fun gold(src: Bitmap): Bitmap {
+        val b = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+        val c = Canvas(b)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        val r = 0.299f; val g = 0.587f; val bl = 0.114f
+        p.colorFilter = ColorMatrixColorFilter(ColorMatrix(floatArrayOf(
+            r * 1.25f, g * 1.25f, bl * 1.25f, 0f, 70f,
+            r * 1.0f, g * 1.0f, bl * 1.0f, 0f, 45f,
+            r * 0.35f, g * 0.35f, bl * 0.35f, 0f, 0f,
+            0f, 0f, 0f, 1f, 0f)))
         c.drawBitmap(src, 0f, 0f, p)
         return b
     }
@@ -468,6 +498,69 @@ class Sprites {
         // casque
         vgrad(p, 14f, 34f, Color.rgb(140, 140, 150), Color.rgb(60, 60, 70))
         c.drawArc(RectF(54f, 16f, 106f, 56f), 180f, 180f, true, p)
+    }
+
+    private fun drawImp(c: Canvas, p: Paint) {
+        // queue
+        p.shader = null; p.style = Paint.Style.STROKE; p.strokeWidth = 5f; p.color = Color.rgb(150, 20, 20); p.strokeCap = Paint.Cap.ROUND
+        c.drawPath(Path().apply { moveTo(56f, 80f); quadTo(84f, 84f, 80f, 60f) }, p)
+        p.style = Paint.Style.FILL
+        solid(p, Color.rgb(150, 20, 20))
+        c.drawPath(poly(80f, 52f, 74f, 62f, 86f, 62f), p)
+        // jambes
+        line(c, p, Color.rgb(160, 25, 25), 7f, 38f, 82f, 34f, 100f)
+        line(c, p, Color.rgb(160, 25, 25), 7f, 52f, 82f, 56f, 100f)
+        // fourche
+        line(c, p, Color.rgb(90, 60, 40), 4f, 70f, 90f, 74f, 22f)
+        line(c, p, Color.rgb(200, 200, 210), 3f, 66f, 22f, 82f, 22f)
+        for (x in floatArrayOf(66f, 74f, 82f)) line(c, p, Color.rgb(200, 200, 210), 3f, x, 22f, x, 12f)
+        // corps rouge
+        rgrad(p, 40f, 56f, 34f, Color.rgb(250, 80, 60), Color.rgb(140, 15, 15))
+        c.drawOval(RectF(24f, 44f, 66f, 88f), p)
+        // tête et cornes
+        rgrad(p, 40f, 28f, 26f, Color.rgb(255, 100, 80), Color.rgb(150, 20, 20))
+        c.drawCircle(45f, 34f, 18f, p)
+        solid(p, Color.rgb(250, 235, 200))
+        c.drawPath(poly(32f, 24f, 24f, 4f, 38f, 20f), p)
+        c.drawPath(poly(58f, 24f, 66f, 4f, 52f, 20f), p)
+        solid(p, Color.rgb(255, 230, 60))
+        c.drawCircle(39f, 34f, 4f, p); c.drawCircle(51f, 34f, 4f, p)
+        solid(p, Color.BLACK)
+        c.drawCircle(39f, 34f, 1.8f, p); c.drawCircle(51f, 34f, 1.8f, p)
+        solid(p, Color.rgb(90, 0, 0))
+        c.drawRoundRect(RectF(38f, 42f, 52f, 47f), 2f, 2f, p)
+    }
+
+    private fun drawBarricade(c: Canvas, p: Paint) {
+        // pieux pointus
+        for (k in 0 until 9) {
+            val x = 14f + k * 36f
+            shade(p, LinearGradient(x - 14f, 0f, x + 14f, 0f, Color.rgb(170, 120, 70), Color.rgb(80, 50, 25), Shader.TileMode.CLAMP))
+            c.drawPath(poly(x - 14f, 168f, x - 14f, 30f, x, 4f, x + 14f, 30f, x + 14f, 168f), p)
+        }
+        // plaques de fer à rayures
+        vgrad(p, 70f, 140f, Color.rgb(120, 125, 135), Color.rgb(50, 52, 60))
+        c.drawRect(0f, 70f, 320f, 140f, p)
+        for (k in 0 until 11) {
+            val x = -20f + k * 34f
+            solid(p, if (k % 2 == 0) Color.rgb(245, 200, 40) else Color.rgb(30, 30, 30))
+            c.drawPath(poly(x, 70f, x + 17f, 70f, x + 37f, 84f, x + 20f, 84f), p)
+            c.drawPath(poly(x, 126f, x + 17f, 126f, x + 37f, 140f, x + 20f, 140f), p)
+        }
+        solid(p, Color.rgb(190, 195, 205))
+        for (x in floatArrayOf(20f, 160f, 300f)) { c.drawCircle(x, 96f, 6f, p); c.drawCircle(x, 114f, 6f, p) }
+    }
+
+    private fun drawPadlock(c: Canvas, p: Paint) {
+        p.shader = null; p.style = Paint.Style.STROKE; p.strokeWidth = 9f; p.color = Color.rgb(200, 200, 210)
+        c.drawArc(RectF(14f, 4f, 50f, 50f), 180f, 180f, false, p)
+        c.drawLine(14f, 27f, 14f, 38f, p); c.drawLine(50f, 27f, 50f, 38f, p)
+        p.style = Paint.Style.FILL
+        vgrad(p, 34f, 78f, Color.rgb(255, 215, 80), Color.rgb(180, 120, 20))
+        c.drawRoundRect(RectF(4f, 34f, 60f, 78f), 8f, 8f, p)
+        solid(p, Color.rgb(60, 40, 10))
+        c.drawCircle(32f, 52f, 6f, p)
+        c.drawRect(29f, 52f, 35f, 66f, p)
     }
 
     private fun drawKnight(c: Canvas, p: Paint) {

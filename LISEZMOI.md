@@ -2,10 +2,24 @@
 
 Jeu Android façon « runner de légion » : ton équipe de héros et sa légion avancent et tirent automatiquement. Un muret coupe la route en deux voies, et tu glisses le doigt pour choisir la tienne.
 
-## Deux modes
+## Trois modes
 
-- **Campagne** : des niveaux de 3 à 4 minutes, avec un gardien à mi-parcours, un boss final et de plus en plus de pression.
-- **Sans limite** : une route infinie à travers les 4 régions, avec un boss toutes les 10 rencontres. La partie ne s'arrête qu'à la mort du dernier héros, et ton record de distance est sauvegardé.
+- **Campagne** : des niveaux de 4 à 5 minutes, avec 3 gardiens puis un boss final. Tu choisis une carte de récompense après chaque boss.
+- **Sans limite** : une route infinie à travers les 4 régions. Un gardien arrive toutes les 5 rencontres, et un boss final tous les 4 boss. La partie ne s'arrête qu'à la mort du dernier héros, et ton record de distance est sauvegardé.
+- **Invasion** : la route est coupée en 3 couloirs.
+  - Au milieu, un flot continu de diablotins déborde sur toi s'il n'est pas repoussé.
+  - À gauche, une longue file de portes +1, qui grandissent quand tu tires dessus.
+  - À droite, des portes +99 verrouillées derrière une barricade à détruire.
+  - Des socles portent des statues dorées (héros, armes, œuf de dragon) à libérer en tirant dessus.
+
+  Chaque vague se termine par un gardien, et la 4e vague par le boss final du chapitre. La partie s'arrête à la mort du dernier héros.
+
+## Gardiens et boss finaux
+
+- **Gardiens** : boss intermédiaires plus petits. Une fois vaincus, ils donnent une récompense immédiate (compétence ou soldats).
+- **Boss finaux** : plus grands, plus résistants et plus agressifs. Ils donnent un choix de 3 cartes.
+
+Un boss n'enchaîne jamais deux attaques annoncées en même temps, donc il y a toujours un couloir sûr.
 
 ## Les héros
 
@@ -26,7 +40,7 @@ On recrute les héros et on améliore leurs compétences de trois façons :
 
 ## Ce que tu croises en route
 
-- **Ennemis** : squelettes, gobelins coureurs, brutes orques, chevaliers noirs.
+- **Ennemis** : squelettes, gobelins coureurs, brutes orques, chevaliers noirs et diablotins (Invasion).
 - **Tonneaux** : soldats, dégâts ou cadence en plus. **Coffres** : héros, compétences ou dragon.
 - **Portes** : bleues (+), rouges (−), dorées (×2), violettes (compétence). Tirer sur une porte bleue ou rouge fait monter sa valeur.
 - **Catapultes** et **attaques de boss** : une zone rouge s'affiche sur ta voie, change de voie à temps !

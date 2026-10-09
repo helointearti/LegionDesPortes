@@ -231,6 +231,11 @@ class Renderer(private val sp: Sprites) {
                 }
                 Ev.BARREL_HIT -> burst(3, e.x, e.z, 0.2f, 1, 1.2f, 0.6f, 0.02f, Color.rgb(150, 95, 50))
                 Ev.BARREL_BREAK -> {
+                    if (e.value == 2) {
+                        burst(3, e.x, e.z, 0.15f, 40, 3f, 1.4f, 0.05f, Color.rgb(140, 100, 60))
+                        burst(4, e.x, e.z, 0.1f, 14, 1.6f, 1.4f, 0.25f)
+                        shake = max(shake, 0.5f)
+                    }
                     burst(3, e.x, e.z, 0.15f, 22, 2.6f, 1.2f, 0.04f, if (e.value == 1) Color.rgb(230, 180, 60) else Color.rgb(160, 100, 50))
                     burst(2, e.x, e.z, 0.2f, 22, 2.2f, 0.8f, 0.12f)
                     addP(2, e.x, e.z, 0.2f, 0f, 0f, 0f, 0.35f, 1.0f)
@@ -664,15 +669,29 @@ class Renderer(private val sp: Sprites) {
         c.drawPath(path, fill)
         fill.shader = null
 
-        // muret central
+        // muret central (deux murets en mode invasion)
         val zs = max(World.DIVIDER_END, z0)
         if (zs < z1) {
-            fill.color = st.wallTop
-            quad(-0.06f, zs, 0.17f, 0.06f, zs, 0.17f, 0.06f, z1, 0.17f, -0.06f, z1, 0.17f)
-            c.drawPath(path, fill)
-            fill.color = st.wallFace
-            if (zs == World.DIVIDER_END) {
-                quad(-0.06f, zs, 0f, 0.06f, zs, 0f, 0.06f, zs, 0.17f, -0.06f, zs, 0.17f)
+            val xs = if (world?.invasion == true) floatArrayOf(-World.INV_EDGE, World.INV_EDGE) else floatArrayOf(0f)
+            for (cxw in xs) {
+                fill.color = st.wallTop
+                quad(cxw - 0.05f, zs, 0.15f, cxw + 0.05f, zs, 0.15f, cxw + 0.05f, z1, 0.15f, cxw - 0.05f, z1, 0.15f)
+                c.drawPath(path, fill)
+                fill.color = st.wallFace
+                val side = if (cxw < 0f) cxw + 0.05f else if (cxw > 0f) cxw - 0.05f else 0f
+                if (cxw != 0f) {
+                    quad(side, zs, 0f, side, z1, 0f, side, z1, 0.15f, side, zs, 0.15f)
+                    c.drawPath(path, fill)
+                }
+                if (zs == World.DIVIDER_END) {
+                    quad(cxw - 0.05f, zs, 0f, cxw + 0.05f, zs, 0f, cxw + 0.05f, zs, 0.15f, cxw - 0.05f, zs, 0.15f)
+                    c.drawPath(path, fill)
+                }
+            }
+            if (world?.invasion == true) {
+                // tapis rouge du couloir central
+                fill.color = Color.argb(45, 200, 30, 30)
+                flat(-World.INV_EDGE + 0.05f, World.INV_EDGE - 0.05f, zs, z1)
                 c.drawPath(path, fill)
             }
         }
@@ -947,17 +966,18 @@ class Renderer(private val sp: Sprites) {
     private fun drawHazards(c: Canvas, world: World) {
         for (hz in world.hazards) {
             if (hz.done) continue
-            val x = hz.lane * 0.5f
+            val x = world.laneX(hz.lane)
+            val rx = if (world.invasion) 0.32f else 0.46f
             if (hz.delay > 0f && hz.delay < hz.telegraph) {
                 val prog = 1f - hz.delay / hz.telegraph
                 val pulse = 0.5f + 0.5f * sin(time * 18f)
                 fill.color = Color.argb((60 + 90 * prog + 30 * pulse).toInt().coerceIn(0, 255), 255, 40, 30)
-                ellipse(c, x, -0.15f, 0.46f, 1.1f, fill)
+                ellipse(c, x, -0.15f, rx, 1.1f, fill)
                 stroke.color = Color.argb(230, 255, 230, 200)
                 stroke.strokeWidth = max(3f, wp * 0.012f)
-                ellipseStroke(c, x, -0.15f, 0.46f * (1f - prog * 0.9f) + 0.04f, 1.1f * (1f - prog * 0.9f) + 0.1f)
+                ellipseStroke(c, x, -0.15f, rx * (1f - prog * 0.9f) + 0.04f, 1.1f * (1f - prog * 0.9f) + 0.1f)
                 stroke.color = Color.argb(200, 255, 80, 60)
-                ellipseStroke(c, x, -0.15f, 0.46f, 1.1f)
+                ellipseStroke(c, x, -0.15f, rx, 1.1f)
                 if (hz.kind == 0) {
                     // rocher qui tombe
                     val hh = hz.delay * 2.4f
@@ -980,7 +1000,7 @@ class Renderer(private val sp: Sprites) {
                         (Random.nextFloat() - 0.5f) * 0.6f, -1f, -0.3f, 0.4f, 0.18f + 0.1f * t)
                 }
                 fill.color = Color.argb(110, 255, 120, 20)
-                ellipse(c, x, -0.15f, 0.48f, 1.2f, fill)
+                ellipse(c, x, -0.15f, rx + 0.02f, 1.2f, fill)
             }
         }
     }
@@ -1148,6 +1168,17 @@ class Renderer(private val sp: Sprites) {
         val speed = if (frozen) 2.5f else if (e.type == EnemyType.RUNNER) 16f else 9f
         val bob = abs(sin(time * speed + e.phase)) * 0.02f
         val size = e.type.size
+        if (e.type == EnemyType.IMP) {
+            // un diablotin = un petit groupe de trois, pour former un vrai tapis rouge
+            for (k in 0 until 3) {
+                val ox = sin(e.phase * (k + 1) * 2.3f) * 0.07f
+                val oz = cos(e.phase * (k + 2) * 1.7f) * 0.16f
+                val b2 = abs(sin(time * 11f + e.phase + k)) * 0.02f
+                sprite(c, sp.enemies[t], e.x + ox, z + oz, 0f, size, lift = b2, flipX = k == 1)
+                if (e.flash > 0f) sprite(c, sp.enemyWhite[t], e.x + ox, z + oz, 0f, size, alpha = 120, lift = b2, flipX = k == 1)
+            }
+            return
+        }
         shadow(c, e.x, z, size * 0.7f)
         sprite(c, sp.enemies[t], e.x, z, 0f, size, lift = bob, flipX = sin(e.phase) > 0f && t < 2)
         if (frozen) sprite(c, sp.enemyIce[t], e.x, z, 0f, size, alpha = 150, lift = bob, flipX = sin(e.phase) > 0f && t < 2)
@@ -1167,6 +1198,8 @@ class Renderer(private val sp: Sprites) {
     }
 
     private fun drawBarrel(c: Canvas, br: Barrel, tr: Float) {
+        if (br.kind == 1) { drawBarricade(c, br, tr); return }
+        if (br.kind == 2) { drawPedestal(c, br, tr); return }
         val z = br.z - tr
         val shakeB = if (br.flash > 0f) (Random.nextFloat() - 0.5f) * 0.02f else 0f
         val bm = if (br.chest) sp.chest else sp.barrel
@@ -1181,6 +1214,92 @@ class Renderer(private val sp: Sprites) {
         drawRewardBanner(c, br.reward, br.x, z, hu + 0.1f)
     }
 
+    private fun drawBarricade(c: Canvas, br: Barrel, tr: Float) {
+        val z = br.z - tr
+        val kk = k(z)
+        val shakeB = if (br.flash > 0f) (Random.nextFloat() - 0.5f) * 0.015f else 0f
+        val w0 = 0.6f
+        val ph = 0.3f * wp * kk
+        val pw = w0 * wp * kk
+        val px = sx(br.x + shakeB, kk); val py = sy(kk, 0f)
+        rect.set(px - pw / 2f, py - ph * 1.25f, px + pw / 2f, py + ph * 0.25f)
+        bmp.alpha = 110
+        c.drawBitmap(sp.shadowBlob, null, rect, bmp)
+        bmp.alpha = 255
+        rect.set(px - pw / 2f, py - ph, px + pw / 2f, py)
+        c.drawBitmap(sp.barricade, null, rect, bmp)
+        if (br.flash > 0f) { bmp.alpha = 80; c.drawBitmap(sp.barricadeWhite, null, rect, bmp); bmp.alpha = 255 }
+        // barre de solidité
+        val f = (br.hp / br.maxHp).coerceIn(0f, 1f)
+        val bh = max(5f, 0.025f * wp * kk)
+        rect.set(px - pw * 0.4f, py - ph - bh * 2.4f, px + pw * 0.4f, py - ph - bh * 1.4f)
+        fill.color = Color.argb(200, 20, 15, 10)
+        c.drawRect(rect, fill)
+        rect.set(px - pw * 0.4f, py - ph - bh * 2.4f, px - pw * 0.4f + pw * 0.8f * f, py - ph - bh * 1.4f)
+        fill.color = Color.rgb(255, 190, 60)
+        c.drawRect(rect, fill)
+        outlined(c, fmt(ceil(br.hp).toInt()), px, py - ph * 0.5f, 0.15f * wp * kk, Color.WHITE)
+    }
+
+    private fun goldIcon(r: Reward): Bitmap = when (r.kind) {
+        RewardKind.SOLDIERS -> sp.goldAlly
+        RewardKind.DAMAGE -> sp.goldSword
+        RewardKind.RATE -> sp.goldBolt
+        RewardKind.DRAGON -> sp.goldDragon
+        RewardKind.SKILL -> sp.goldSkills[r.hero!!.ordinal]
+        RewardKind.RECRUIT -> sp.goldHeroes[r.hero!!.ordinal]
+        RewardKind.HEAL -> sp.goldHeart
+        RewardKind.UNLOCK -> sp.padlock
+    }
+
+    /** Socle doré avec une statue (héros, arme…) à libérer en tirant dessus. */
+    private fun drawPedestal(c: Canvas, br: Barrel, tr: Float) {
+        val z = br.z - tr
+        val x = br.x
+        val hw = 0.24f
+        val bh = 0.1f
+        val dz = 0.45f
+        shadow(c, x, z, 0.6f)
+        glowAt(c, sp.glowGold, x, z, 0.08f, 0.8f, (80 + 40 * sin(time * 3f)).toInt())
+        // dessus et face avant du socle
+        fill.color = Color.rgb(255, 220, 90)
+        quad(x - hw, z, bh, x + hw, z, bh, x + hw, z + dz, bh, x - hw, z + dz, bh)
+        c.drawPath(path, fill)
+        val kk0 = k(z)
+        fill.color = Color.WHITE
+        fill.shader = LinearGradient(0f, sy(kk0, bh), 0f, sy(kk0, 0f), Color.rgb(250, 200, 60), Color.rgb(180, 120, 20), Shader.TileMode.CLAMP)
+        quad(x - hw, z, 0f, x + hw, z, 0f, x + hw, z, bh, x - hw, z, bh)
+        c.drawPath(path, fill)
+        fill.shader = null
+        // statue dorée
+        val icon = goldIcon(br.reward)
+        val tall = br.reward.kind == RewardKind.RECRUIT
+        val hu = if (tall) 0.55f else if (br.reward.kind == RewardKind.DRAGON) 0.4f else 0.42f
+        val shakeB = if (br.flash > 0f) (Random.nextFloat() - 0.5f) * 0.015f else 0f
+        val kk = k(z + dz * 0.5f)
+        val ph = hu * wp * kk
+        val pw = min(ph * icon.width / icon.height, 0.62f * wp * kk)
+        val phh = pw * icon.height / icon.width
+        val px = sx(x + shakeB, kk); val py = sy(kk, bh)
+        rect.set(px - pw / 2f, py - phh, px + pw / 2f, py)
+        c.drawBitmap(icon, null, rect, bmp)
+        if (br.flash > 0f) { add.alpha = 70; c.drawBitmap(icon, null, rect, add); add.alpha = 255 }
+        if (Random.nextFloat() < 0.08f) addP(2, x + (Random.nextFloat() - 0.5f) * 0.3f, z + 0.2f, bh + Random.nextFloat() * hu, 0f, 0f, 0.2f, 0.6f, 0.05f)
+        // points de vie sur la face avant
+        outlined(c, fmt(ceil(br.hp).toInt()), sx(x, kk0), sy(kk0, bh * 0.5f) + 0.005f * wp, 0.12f * wp * kk0, Color.WHITE)
+        // nom de la récompense
+        val label = when (br.reward.kind) {
+            RewardKind.RECRUIT -> br.reward.hero!!.title
+            RewardKind.SKILL -> br.reward.hero!!.skill + " +1"
+            RewardKind.DAMAGE -> "Hache runique ×1.3"
+            RewardKind.RATE -> "Arbalète rapide +20%"
+            RewardKind.DRAGON -> "Œuf de dragon"
+            RewardKind.HEAL -> "Calice de soin"
+            else -> br.reward.label()
+        }
+        outlined(c, label, px, py - phh - 0.04f * wp * kk, 0.06f * wp * kk, Color.rgb(255, 230, 140))
+    }
+
     private fun rewardIcon(r: Reward): Bitmap = when (r.kind) {
         RewardKind.SOLDIERS -> sp.ally
         RewardKind.DAMAGE -> sp.iconSword
@@ -1189,6 +1308,7 @@ class Renderer(private val sp: Sprites) {
         RewardKind.SKILL -> sp.skillIcons[r.hero!!.ordinal]
         RewardKind.RECRUIT -> sp.heroes[r.hero!!.ordinal]
         RewardKind.HEAL -> sp.iconHeart
+        RewardKind.UNLOCK -> sp.padlock
     }
 
     private fun drawRewardBanner(c: Canvas, r: Reward, x: Float, z: Float, hh: Float) {
@@ -1220,14 +1340,15 @@ class Renderer(private val sp: Sprites) {
 
     private fun drawGate(c: Canvas, world: World, g: Gate, tr: Float) {
         val z = g.z - tr
-        val s = g.lane.toFloat()
-        val xa = min(s * 0.08f, s * 0.97f)
-        val xb = max(s * 0.08f, s * 0.97f)
-        val gh = 0.36f
-        val alphaMul = if (g.used) 0.3f else 1f
+        val xa = g.xa
+        val xb = g.xb
+        val gh = if (g.small) 0.24f else 0.36f
+        val alphaMul = if (g.used) 0.3f else if (g.locked) 0.75f else 1f
         val kk = k(z)
         val top = sy(kk, gh); val bot = sy(kk, 0f)
-        val (c0, c1, topC) = when (g.kind) {
+        val (c0, c1, topC) = if (g.locked) Triple(Color.rgb(150, 150, 160), Color.rgb(70, 70, 80), Color.rgb(190, 190, 200))
+        else if (g.small && g.lane == 1) Triple(Color.rgb(255, 225, 60), Color.rgb(220, 160, 0), Color.rgb(255, 240, 150))
+        else when (g.kind) {
             GateKind.SOLDIERS -> if (g.value >= 0f) Triple(Color.rgb(80, 160, 255), Color.rgb(20, 60, 210), Color.rgb(170, 215, 255))
             else Triple(Color.rgb(255, 80, 80), Color.rgb(160, 15, 25), Color.rgb(255, 170, 170))
             GateKind.MULT -> Triple(Color.rgb(255, 210, 70), Color.rgb(200, 120, 10), Color.rgb(255, 235, 150))
@@ -1273,7 +1394,15 @@ class Renderer(private val sp: Sprites) {
         when (g.kind) {
             GateKind.SOLDIERS -> {
                 val v = g.value.toInt()
-                outlined(c, (if (v >= 0) "+" else "") + fmt(v), mx, sy(kk, gh * 0.5f), 0.17f * wp * kk, Color.WHITE)
+                val ts = (if (g.small) 0.14f else 0.17f) * wp * kk
+                outlined(c, (if (v >= 0) "+" else "") + fmt(v), mx, sy(kk, gh * 0.5f), ts, if (g.locked) Color.rgb(220, 220, 225) else Color.WHITE)
+                if (g.locked) {
+                    val lh = gh * 0.75f * wp * kk
+                    val lw = lh * sp.padlock.width / sp.padlock.height
+                    val lx = sx(xb, kk) - lw * 0.3f
+                    rect.set(lx - lw / 2f, sy(kk, gh) - lh * 0.6f, lx + lw / 2f, sy(kk, gh) + lh * 0.4f)
+                    c.drawBitmap(sp.padlock, null, rect, bmp)
+                }
             }
             GateKind.MULT -> outlined(c, "×" + g.value.toInt(), mx, sy(kk, gh * 0.5f), 0.22f * wp * kk, Color.WHITE)
             GateKind.SKILL -> {
@@ -1321,7 +1450,7 @@ class Renderer(private val sp: Sprites) {
     private fun drawBoss(c: Canvas, bs: Boss, tr: Float) {
         val z = bs.z - tr
         val t = bs.type.ordinal
-        val scale = if (bs.mini) 0.72f else 1f
+        val scale = if (bs.mini) 0.72f else if (bs.chief) 1.25f else 1f
         val hu = when (bs.type) { BossType.DRAGON -> 0.95f; BossType.NECRO -> 0.95f; BossType.GOLEM -> 1.0f; else -> 0.9f } * scale
         val hover = when (bs.type) {
             BossType.DRAGON -> 0.25f + sin(time * 2.5f) * 0.05f

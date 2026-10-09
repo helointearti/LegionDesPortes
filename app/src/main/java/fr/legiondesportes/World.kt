@@ -2,6 +2,8 @@ package fr.legiondesportes
 
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -60,7 +62,8 @@ enum class EnemyType(val speed: Float, val size: Float, val killFrac: Float, val
     SKELETON(1.5f, 0.19f, 0.006f, 1, 0.5f),
     RUNNER(3.0f, 0.16f, 0.004f, 1, 0.4f),
     BRUTE(0.9f, 0.30f, 0.03f, 3, 1.5f),
-    KNIGHT(1.0f, 0.42f, 0.12f, 8, 3f)
+    KNIGHT(1.0f, 0.42f, 0.12f, 8, 3f),
+    IMP(1.3f, 0.15f, 0.004f, 1, 0.4f)
 }
 
 class Enemy(val type: EnemyType, var x: Float, var z: Float, var hp: Float, val spread: Float, val phase: Float) {
@@ -72,7 +75,7 @@ class Enemy(val type: EnemyType, var x: Float, var z: Float, var hp: Float, val 
 
 // ====================================================================== récompenses
 
-enum class RewardKind { SOLDIERS, DAMAGE, RATE, DRAGON, SKILL, RECRUIT, HEAL }
+enum class RewardKind { SOLDIERS, DAMAGE, RATE, DRAGON, SKILL, RECRUIT, HEAL, UNLOCK }
 
 class Reward(val kind: RewardKind, val hero: HeroType? = null, val amount: Int = 0) {
     fun label(): String = when (kind) {
@@ -83,6 +86,7 @@ class Reward(val kind: RewardKind, val hero: HeroType? = null, val amount: Int =
         RewardKind.SKILL -> "NIV +1"
         RewardKind.RECRUIT -> "RECRUE"
         RewardKind.HEAL -> "SOINS"
+        RewardKind.UNLOCK -> "OUVRIR"
     }
 
     fun longLabel(): String = when (kind) {
@@ -93,22 +97,27 @@ class Reward(val kind: RewardKind, val hero: HeroType? = null, val amount: Int =
         RewardKind.SKILL -> "${hero!!.skill.uppercase()} +1"
         RewardKind.RECRUIT -> "${hero!!.title.uppercase()} !"
         RewardKind.HEAL -> "HÉROS SOIGNÉS"
+        RewardKind.UNLOCK -> "PASSAGE OUVERT !"
     }
 }
 
-class Barrel(val lane: Int, val z: Float, var hp: Float, val reward: Reward, val chest: Boolean) {
+/** kind : 0 tonneau/coffre, 1 barricade (débloque des portes), 2 socle doré (objet ou héros) */
+class Barrel(val lane: Int, val z: Float, var hp: Float, val reward: Reward, val chest: Boolean,
+             val kind: Int = 0, val xPos: Float = lane * 0.5f, val group: Int = -1) {
     val maxHp = hp
     var alive = true
     var flash = 0f
-    val x: Float get() = lane * 0.5f
+    val x: Float get() = xPos
 }
 
 enum class GateKind { SOLDIERS, MULT, SKILL }
 
-class Gate(val lane: Int, val z: Float, var value: Float, val gain: Float, val kind: GateKind, val reward: Reward? = null) {
+class Gate(val lane: Int, val z: Float, var value: Float, val gain: Float, val kind: GateKind, val reward: Reward? = null,
+           val xa: Float = min(lane * 0.08f, lane * 0.97f), val xb: Float = max(lane * 0.08f, lane * 0.97f),
+           val group: Int = -1, var locked: Boolean = false, val small: Boolean = false) {
     var used = false
     var flash = 0f
-    val x: Float get() = lane * 0.5f
+    val x: Float get() = (xa + xb) / 2f
 }
 
 // ====================================================================== dangers et boss
@@ -127,7 +136,7 @@ enum class BossType(val title: String) {
     DRAGON("Dragon noir")
 }
 
-class Boss(val type: BossType, var z: Float, var hp: Float, val mini: Boolean, val final: Boolean) {
+class Boss(val type: BossType, var z: Float, var hp: Float, val mini: Boolean, val final: Boolean, val chief: Boolean = final) {
     val maxHp = hp
     var alive = true
     var flash = 0f
@@ -179,7 +188,7 @@ class Ev(val type: Int, val x: Float, val z: Float, val value: Int = 0, val rewa
 
 // ====================================================================== monde
 
-enum class Mode { CAMPAIGN, ENDLESS }
+enum class Mode { CAMPAIGN, ENDLESS, INVASION }
 
 class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Default) {
 
@@ -191,7 +200,7 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
         const val MAX_SHOWN = 40         // soldats dessinés au maximum
         const val CONTACT = 0.35f
         const val VIEW = 19f             // distance de tir max (= distance visible)
-        const val BOSS_EVERY = 10        // rencontres entre deux boss (mode sans limite)
+        const val BOSS_EVERY = 10        // rencontres par paire de boss (mode sans limite)
         const val MAX_COUNT = 1_000_000_000
 
         val HX = floatArrayOf(0f, -0.17f, 0.17f, -0.31f, 0.31f)
@@ -209,7 +218,11 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
         const val E_SKILLGATES = 8
         const val E_KNIGHT = 9
         const val E_AMBUSH = 10
+        const val E_WAVE = 50
         const val E_BOSS = 99
+        const val INV_EDGE = 0.34f     // séparation des 3 couloirs (mode invasion)
+        const val INV_LANE = 0.66f     // centre des couloirs latéraux
+        const val WAVE_LEN = 46f
     }
 
     var basePower = 16f
@@ -275,11 +288,20 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
             growth = 1.16f
             rubber = 0.85f
         }
-        val startBiome = if (mode == Mode.CAMPAIGN) (level - 1) % 4 else 0
+        if (mode == Mode.INVASION) { playerX = 0f; targetX = 0f }
+        val startBiome = if (mode == Mode.CAMPAIGN) (level - 1) % 4 else if (mode == Mode.INVASION) 1 else 0
         biomeZ.add(-1000f); biomeId.add(startBiome)
     }
 
-    val lane: Int get() = if (playerX < 0f) -1 else 1
+    val invasion: Boolean get() = mode == Mode.INVASION
+
+    /** Couloir d'une position x : -1 / +1 (et 0 au milieu en mode invasion). */
+    fun laneOf(x: Float): Int = if (invasion) { if (x < -INV_EDGE) -1 else if (x > INV_EDGE) 1 else 0 } else { if (x < 0f) -1 else 1 }
+    fun laneX(l: Int): Float = l * (if (invasion) INV_LANE else 0.5f)
+
+    val lane: Int get() = laneOf(playerX)
+
+    private fun otherLane(): Int = if (lane == 0) (if (rnd.nextBoolean()) -1 else 1) else -lane
 
     fun heroX(i: Int): Float = playerX + HX[i]
     fun heroZ(i: Int): Float = HZ[i]
@@ -327,13 +349,12 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
     // ================================================================== génération
 
     private class Enc(val z: Float, val type: Int, val side: Int, val idx: Int,
-                      val bossType: BossType? = null, val mini: Boolean = false, val final: Boolean = false)
+                      val bossType: BossType? = null, val mini: Boolean = false, val final: Boolean = false, val chief: Boolean = false)
 
     private val encs = ArrayDeque<Enc>()
     private var genZ = 22f
     private var normalCount = 0
     private var normalSinceBoss = 0
-    private var midPlanned = false
     private var campaignDone = false
     private var lastType = -1
     private val bossOrder = ArrayList<BossType>()
@@ -358,14 +379,22 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
         return bossOrder.removeAt(0)
     }
 
-    private fun planBoss(mini: Boolean, final: Boolean) {
+    /** Numéro du boss en cours de planification (gardiens + boss finaux). */
+    private var bossSeq = 0
+    var chapter = 1
+        private set
+
+    private fun planBoss(mini: Boolean, final: Boolean, chief: Boolean = final) {
         val bz = genZ + 6f
+        bossSeq++
         val bt = if (mode == Mode.CAMPAIGN) {
-            if (final) BossType.values()[(level - 1) % 4] else BossType.values()[(level + 1) % 4]
+            if (final) BossType.values()[(level - 1) % 4] else BossType.values()[(level + bossSeq) % 4]
         } else nextBossType()
-        encs.addLast(Enc(bz, E_BOSS, 1, normalCount + offset, bt, mini, final))
+        encs.addLast(Enc(bz, E_BOSS, 1, normalCount + offset, bt, mini, final, chief))
         if (final) levelEnd = bz - 10.5f
-        if (!final) {
+        // nouvelle région : après chaque gardien en campagne, après un boss sur deux sinon
+        val changeBiome = !final && (mode == Mode.CAMPAIGN || bossSeq % 2 == 0)
+        if (changeBiome) {
             // la région suivante commence derrière le boss
             biomeZ.add(bz + 5f); biomeId.add(nextBiome)
             biomeArches.add(bz + 5f)
@@ -375,12 +404,27 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
     }
 
     private fun planNext() {
+        if (invasion) {
+            if (normalSinceBoss >= 1) {
+                val chief = (bossSeq + 1) % 4 == 0
+                planBoss(mini = !chief, final = false, chief = chief)
+                normalSinceBoss = 0
+                return
+            }
+            encs.addLast(Enc(genZ, E_WAVE, 1, normalCount + offset))
+            genZ += WAVE_LEN
+            normalCount++
+            normalSinceBoss++
+            return
+        }
         if (mode == Mode.CAMPAIGN) {
             if (campaignDone) return
             if (normalCount >= campaignLen) { planBoss(mini = false, final = true); campaignDone = true; return }
-            if (normalCount >= campaignLen / 2 && !midPlanned) { planBoss(mini = true, final = false); midPlanned = true; return }
-        } else if (normalSinceBoss >= BOSS_EVERY) {
-            planBoss(mini = false, final = false)
+            // trois gardiens avant le boss final
+            if (bossSeq < 3 && normalCount >= campaignLen * (bossSeq + 1) / 4) { planBoss(mini = true, final = false); return }
+        } else if (normalSinceBoss >= BOSS_EVERY / 2) {
+            val chief = (bossSeq + 1) % 4 == 0
+            planBoss(mini = !chief, final = false, chief = chief)
             normalSinceBoss = 0
             return
         }
@@ -457,6 +501,7 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
             EnemyType.RUNNER -> (8f + 1.4f * i).roundToInt().coerceIn(8, 60)
             EnemyType.BRUTE -> (3f + 0.35f * i).roundToInt().coerceIn(3, 14)
             EnemyType.KNIGHT -> 1
+            EnemyType.IMP -> (14f + 2f * i).roundToInt().coerceIn(14, 120)
         }
         val n2 = max(1, (n * min(1f, frac / 0.5f + 0.2f)).roundToInt())
         val hp = max(1f, total / n2)
@@ -466,6 +511,7 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
             val row = k / perRow
             val x = when (side) {
                 0 -> -0.9f + rnd.nextFloat() * 1.8f
+                2 -> (rnd.nextFloat() - 0.5f) * 2f * (INV_EDGE - 0.07f)
                 else -> if (type == EnemyType.KNIGHT) side * 0.5f else side * (0.12f + rnd.nextFloat() * 0.8f)
             }
             val zz = z + row * rowGap + rnd.nextFloat() * 0.3f
@@ -592,13 +638,100 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
                 spawnHorde(EnemyType.RUNNER, if (rnd.nextBoolean()) -1 else 1, z + 5f, p * 0.35f)
                 announceText("Embuscade !")
             }
+            E_WAVE -> spawnWave(e)
             E_BOSS -> {
-                val t = if (e.mini) 11f else 19f
+                if (invasion) { streamOn = false }
+                val t = (if (invasion) 14f else 19f) * (if (e.mini) 0.6f else if (e.chief) 1.5f else 1f)
                 val pb = min(0.62f + 0.006f * i, 0.8f) * pressureMul
-                val hp = t * max(curB, effDps() * 0.9f) * pb * (if (e.final) 1.15f else 1f)
-                boss = Boss(e.bossType!!, z, hp.roundToInt().toFloat(), e.mini, e.final)
-                announceText(e.bossType.title + (if (e.mini) " (gardien)" else ""))
+                val hp = t * max(curB, effDps() * 0.9f) * pb
+                boss = Boss(e.bossType!!, z, hp.roundToInt().toFloat(), e.mini, e.final, e.chief)
+                announceText(if (e.chief) "BOSS FINAL : " + e.bossType.title else e.bossType.title + " (gardien)")
             }
+        }
+    }
+
+    // ---------------------------------------------------------------- mode invasion
+
+    private var streamOn = false
+    private var streamStart = 0f
+    private var streamEnd = 0f
+    private var streamRate = 10f
+    private var streamHp = 1f
+    private var streamAcc = 0f
+    private var streamRefresh = 0f
+    private var waveIdx = 0
+    private var groupSeq = 0
+    var wave = 0
+        private set
+
+    private fun nice(v: Float): Int {
+        if (v < 10f) return max(1, v.roundToInt())
+        val p = 10f.pow(floor(log10(v)) - 1f)
+        val r = (v / p).roundToInt() * p
+        return if (r >= 100f) ((r / 100f).roundToInt() * 100 - 1).coerceAtLeast(99) else r.roundToInt()
+    }
+
+    private fun spawnWave(e: Enc) {
+        val n = e.idx - offset
+        wave = n + 1
+        waveIdx = 6 * n
+        refreshBudget(waveIdx)
+        val z0 = e.z
+        val scale = 1.45f.pow(n)
+        // couloir gauche : longue file de portes +1 qui grandissent quand on tire dessus
+        val v1 = nice(scale).toFloat()
+        val g1 = 1f / (dps() * 0.7f) * v1
+        var z = z0 + 2f
+        while (z < z0 + WAVE_LEN - 3f) {
+            if (abs(z - (z0 + 30f)) > 1.6f)
+                gates.add(Gate(-1, z, v1, g1, GateKind.SOLDIERS, xa = -0.97f, xb = -INV_EDGE - 0.04f, small = true))
+            z += 1.35f
+        }
+        // couloir droit : barricade, puis portes +99 verrouillées
+        val grp = groupSeq++
+        val bhp = max(30f, (approach(0f) * curB * 0.5f).roundToInt().toFloat())
+        barrels.add(Barrel(1, z0 + 5f, bhp, Reward(RewardKind.UNLOCK), false, kind = 1, xPos = INV_LANE, group = grp))
+        val v99 = nice(99f * scale).toFloat()
+        z = z0 + 8f
+        for (k in 0 until 9) {
+            gates.add(Gate(1, z, v99, 0f, GateKind.SOLDIERS, xa = INV_EDGE + 0.04f, xb = 0.97f, group = grp, locked = true, small = true))
+            z += 1.6f
+        }
+        // socles dorés : un précieux à gauche, un plus facile à droite
+        val left = chestReward()
+        var right = if (rnd.nextBoolean()) Reward(RewardKind.RATE) else Reward(RewardKind.DAMAGE)
+        if (n == 0) right = Reward(RewardKind.RECRUIT, HeroType.values().filter { !hasHero(it) }.random(rnd))
+        barrels.add(Barrel(-1, z0 + 30f, max(20f, (approach(0f) * curB * 0.75f).roundToInt().toFloat()), left, true, kind = 2, xPos = -INV_LANE))
+        barrels.add(Barrel(1, z0 + 34f, max(10f, (approach(0f) * curB * 0.35f).roundToInt().toFloat()), right, true, kind = 2, xPos = INV_LANE))
+        // flot continu au milieu
+        streamOn = true
+        streamStart = z0 + 26f
+        streamEnd = z0 + WAVE_LEN + 4f
+        streamRate = 9f + min(n, 10) * 0.9f
+        updateStreamHp()
+        announceText("Vague $wave")
+    }
+
+    private fun updateStreamHp() {
+        refreshBudget(waveIdx)
+        val shots = min(count * 1.2f * rateMul, 18f) + aliveHeroes * 2f * rateMul
+        streamRate = (shots * 0.3f).coerceIn(2f, 9f + min(wave - 1, 10) * 0.9f)
+        val p = min(0.55f + 0.02f * waveIdx, 0.85f) * pressureMul
+        streamHp = max(1f, curB * p / streamRate)
+    }
+
+    private fun updateStream(dt: Float) {
+        if (!streamOn) return
+        val zs = traveled + VIEW + 0.5f
+        if (zs < streamStart) return
+        if (zs > streamEnd) { streamOn = false; return }
+        streamRefresh -= dt
+        if (streamRefresh <= 0f) { streamRefresh = 2f; updateStreamHp() }
+        streamAcc += dt * streamRate
+        while (streamAcc >= 1f) {
+            streamAcc -= 1f
+            val x = (rnd.nextFloat() - 0.5f) * 2f * (INV_EDGE - 0.07f)
+            enemies.add(Enemy(EnemyType.IMP, x, zs + rnd.nextFloat() * 0.4f, streamHp, (rnd.nextFloat() - 0.5f) * 0.5f, rnd.nextFloat() * 6.28f))
         }
     }
 
@@ -666,6 +799,7 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
             planAhead()
         }
 
+        updateStream(dt)
         updateEnemies(dt)
         if (state != State.RUNNING) return
 
@@ -677,7 +811,7 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
             if (g.flash > 0f) g.flash -= dt
             if (!g.used && g.z - traveled <= 0f) {
                 g.used = true
-                if (g.lane == lane) passGate(g)
+                if (laneOf(g.x) == lane && !g.locked) passGate(g)
             }
         }
 
@@ -703,11 +837,15 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
             bossKills++
             bossFights.add(bb.type to bossFight)
             bossFight = 0f
+            if (bb.chief && mode != Mode.CAMPAIGN) chapter++
             if (bb.final) {
                 state = State.WON
-            } else {
+            } else if (bb.chief || mode == Mode.CAMPAIGN) {
                 cards = makeCards()
                 state = State.CHOOSING
+            } else {
+                // gardien vaincu : récompense immédiate
+                applyReward(if (rnd.nextFloat() < 0.6f) skillReward() else soldiersReward(), 0f, 2f)
             }
         }
     }
@@ -753,6 +891,7 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
                 for (h in heroes) { h.alive = true; h.hp = h.maxHp.toFloat() }
                 count = min(MAX_COUNT, count + max(5, count / 5))
             }
+            RewardKind.UNLOCK -> Unit
         }
         events.add(Ev(Ev.REWARD, x, rel, 0, r))
     }
@@ -778,7 +917,7 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
             if (hz.delay <= 0f) {
                 if (!hz.impacted) {
                     hz.impacted = true
-                    events.add(Ev(Ev.IMPACT, hz.lane * 0.5f, 0.2f, hz.kind))
+                    events.add(Ev(Ev.IMPACT, laneX(hz.lane), 0.2f, hz.kind))
                 }
                 if (!hz.hit && lane == hz.lane && hz.delay > -hz.window) {
                     hz.hit = true
@@ -814,22 +953,27 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
         if (rel < 11f && rel > minRel) b.z -= walk * sf * dt
 
         b.abilityCd -= dt * sf * (if (b.enraged) 1.8f else 1f)
-        if (b.abilityCd <= 0f && rel < 11f) {
-            val m = if (b.mini) 1.3f else 1f
+        if (b.abilityCd <= 0f && rel < 11f && (hazards.isEmpty() || b.type == BossType.NECRO)) {
+            val m = if (b.mini) 1.3f else if (b.chief) 0.8f else 1f
             b.anim = 0f
             events.add(Ev(Ev.BOSS_CAST, 0f, rel, b.type.ordinal))
             when (b.type) {
                 BossType.DEMON -> { hazards.add(Hazard(lane, 1.3f, 1.3f, 0.15f, 0.22f, 2)); b.abilityCd = 4.0f * m }
                 BossType.GOLEM -> {
                     hazards.add(Hazard(lane, 1.2f, 1.2f, 0.15f, 0.2f, 0))
-                    if (!b.mini && rnd.nextFloat() < 0.4f) hazards.add(Hazard(-lane, 2.4f, 1.2f, 0.15f, 0.2f, 0))
+                    if (!b.mini && rnd.nextFloat() < 0.4f) hazards.add(Hazard(otherLane(), 2.4f, 1.2f, 0.15f, 0.2f, 0))
                     b.abilityCd = 3.4f * m
                 }
                 BossType.NECRO -> {
                     refreshBudget(curIdx)
-                    val side = if (rnd.nextBoolean()) -1 else 1
-                    spawnHorde(EnemyType.SKELETON, side, traveled + 15f, pressure(curIdx) * 0.38f)
-                    events.add(Ev(Ev.SUMMON, side * 0.5f, 15f))
+                    val side = if (invasion) 0 else if (rnd.nextBoolean()) -1 else 1
+                    if (invasion) {
+                        spawnHorde(EnemyType.IMP, 2, traveled + 9f, pressure(curIdx) * 0.38f)
+                        events.add(Ev(Ev.SUMMON, 0f, 9f))
+                    } else {
+                        spawnHorde(EnemyType.SKELETON, side, traveled + 15f, pressure(curIdx) * 0.38f)
+                        events.add(Ev(Ev.SUMMON, side * 0.5f, 15f))
+                    }
                     b.abilityCd = 5.2f * m
                 }
                 BossType.DRAGON -> { hazards.add(Hazard(lane, 1.4f, 1.4f, 0.8f, 0.28f, 1)); b.abilityCd = 4.4f * m }
@@ -876,18 +1020,18 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
         when (h.type) {
             HeroType.FIRE -> {
                 // vise l'ennemi le plus proche dans la voie, sinon le boss, sinon un tonneau
-                var tx = lane * 0.5f
+                var tx = laneX(lane)
                 var found = false
                 var best = Float.MAX_VALUE
                 for (e in enemies) if (e.alive) {
                     val r = e.z - traveled
-                    if (r > 0.5f && r < VIEW && (e.x < 0f) == (lane < 0) && r < best) { best = r; tx = e.x; found = true }
+                    if (r > 0.5f && r < VIEW && laneOf(e.x) == lane && r < best) { best = r; tx = e.x; found = true }
                 }
                 if (!found) {
                     val b = boss
                     if (b != null && b.alive && b.z - traveled < VIEW) { tx = lane * 0.3f; found = true }
                 }
-                if (!found) for (br in barrels) if (br.alive && br.lane == lane && br.z - traveled < VIEW) found = true
+                if (!found) for (br in barrels) if (br.alive && laneOf(br.x) == lane && br.z - traveled < VIEW) { found = true; tx = br.x }
                 if (!found) return false
                 projs.add(Proj(hx, 0.35f, d * (0.5f + 0.3f * l), 3, 0, tx, 0.3f + 0.05f * l))
             }
@@ -997,7 +1141,8 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
         events.add(Ev(Ev.BARREL_HIT, x, rel, kind))
         if (br.hp <= 0f && br.alive) {
             br.alive = false
-            events.add(Ev(Ev.BARREL_BREAK, br.x, rel, if (br.chest) 1 else 0, br.reward))
+            events.add(Ev(Ev.BARREL_BREAK, br.x, rel, if (br.kind == 1) 2 else if (br.chest) 1 else 0, br.reward))
+            if (br.kind == 1) for (g in gates) if (g.group == br.group) g.locked = false
             applyReward(br.reward, br.x, rel)
         }
     }
@@ -1072,7 +1217,7 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
             p.z += speed * dt
             if (p.kind == 3) p.x += (p.tx - p.x) * min(1f, dt * 3f)
             if (p.z > VIEW) { p.alive = false; continue }
-            val pl = if (p.x < 0f) -1 else 1
+            val pl = laneOf(p.x)
 
             var bestZ = Float.MAX_VALUE
             var hitEnemy: Enemy? = null
@@ -1084,17 +1229,17 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
                 if (!e.alive) continue
                 val rel = e.z - traveled
                 if (rel > p.z || rel < -0.3f) continue
-                if ((e.x < 0f) != (pl < 0)) continue
+                if (laneOf(e.x) != pl) continue
                 if (rel < bestZ) { bestZ = rel; hitEnemy = e }
             }
             for (br in barrels) {
-                if (!br.alive || br.lane != pl) continue
+                if (!br.alive || laneOf(br.x) != pl) continue
                 val rel = br.z - traveled
                 if (rel > p.z || rel < -0.3f) continue
                 if (rel < bestZ) { bestZ = rel; hitBarrel = br; hitEnemy = null }
             }
             if (p.kind != 3) for (g in gates) {
-                if (g.used || g.lane != pl || g.kind != GateKind.SOLDIERS) continue
+                if (g.used || g.locked || laneOf(g.x) != pl || g.kind != GateKind.SOLDIERS || g.gain <= 0f) continue
                 val rel = g.z - traveled
                 if (rel > p.z || rel < 0f) continue
                 if (rel < bestZ) { bestZ = rel; hitGate = g; hitBarrel = null; hitEnemy = null }
@@ -1214,7 +1359,7 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
     fun nearestEnemy(l: Int): Float {
         var best = Float.MAX_VALUE
         for (e in enemies) if (e.alive) {
-            val el = if (e.x < 0f) -1 else 1
+            val el = laneOf(e.x)
             val rel = e.z - traveled
             if (el == l && rel < best && rel > 0f) best = rel
         }
@@ -1224,7 +1369,7 @@ class World(val mode: Mode, val level: Int, private val rnd: Random = Random.Def
     fun hpInLane(l: Int, maxRel: Float): Float {
         var s = 0f
         for (e in enemies) if (e.alive) {
-            val el = if (e.x < 0f) -1 else 1
+            val el = laneOf(e.x)
             val rel = e.z - traveled
             if (el == l && rel < maxRel) s += e.hp
         }
