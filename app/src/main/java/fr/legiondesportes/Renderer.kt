@@ -265,8 +265,8 @@ class Renderer(private val sp: Sprites) {
                     hurt = min(0.5f, hurt + 0.05f)
                 }
                 Ev.BOSS_HIT -> {
-                    if (Random.nextFloat() < 0.5f)
-                        burst(if (e.value == 1) 1 else 0, e.x * 0.6f, e.z - 0.2f, 0.3f + Random.nextFloat() * 0.4f, 2, 1.0f, 0.3f, 0.06f)
+                    if (Random.nextFloat() < 0.2f)
+                        burst(if (e.value == 1) 1 else 0, e.x * 0.6f, e.z - 0.4f, 0.2f + Random.nextFloat() * 0.5f, 1, 1.0f, 0.25f, 0.05f)
                 }
                 Ev.BOSS_DIE -> {
                     burst(0, 0f, e.z, 0.4f, 80, 4f, 1.4f, 0.24f)
@@ -1356,7 +1356,7 @@ class Renderer(private val sp: Sprites) {
             sprite(c, sp.bosses[t], 0f, z, 0f, hu, lift = hover)
             if (bs.flash > 0.05f) sprite(c, sp.bossWhite[t], 0f, z, 0f, hu, alpha = 45, lift = hover)
         }
-        if (bs.slow > 0f) glowAt(c, sp.glowIce, 0f, z, hu * 0.4f, hu * 1.3f, 120)
+        if (bs.slow > 0f) glowAt(c, sp.glowIce, 0f, z, hu * 0.15f, hu * 0.9f, 45)
         val kk = k(z)
         val bw = 0.9f * wp * kk
         val px = sx(0f, kk)
